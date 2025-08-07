@@ -8,11 +8,11 @@ Rayfield:Notify({
 })
 
 local Window = Rayfield:CreateWindow({
-   Name = "Gojo Hub",
+   Name = "Gojo Hub | MM2",
    Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
    LoadingTitle = "Loading Gojo Hub",
    LoadingSubtitle = "by Gojo",
-   ShowText = "Rayfield", -- for mobile users to unhide rayfield, change if you'd like
+   ShowText = "GojoHub", -- for mobile users to unhide rayfield, change if you'd like
    Theme = "Default", -- Check https://docs.sirius.menu/rayfield/configuration/themes
 
    ToggleUIKeybind = "K", -- The keybind to toggle the UI visibility (string like "K" or Enum.KeyCode)
@@ -23,7 +23,7 @@ local Window = Rayfield:CreateWindow({
    ConfigurationSaving = {
       Enabled = true,
       FolderName = nil, -- Create a custom folder for your hub/game
-      FileName = "Big Hub"
+      FileName = "Gojo Hub"
    },
 
    Discord = {
@@ -49,31 +49,202 @@ setclipboard("https://discord.gg/7WtejdcD")
 Rayfield:Notify({
    Title = "Discord Link Copied",
    Content = "The discord link was copied to clipboard: https://discord.gg/7WtejdcD",
-   Duration = 2.5,
+   Duration = 4,
 })
-local InfoTab = Window:CreateTab("Info")
-local PlayerTab = Window:CreateTab("Player")
-local EspTab = Window:CreateTab("Esp")
-local GameTab = Window:CreateTab("Game")
-local BringItemTab = Window:CreateTab("Bring Item")
-local DiscordTab = Window:CreateTab("Discord")
-local SettingsTab = Window:CreateTab("Settings")
-local ActiveEspItems,ActiveDistanceEsp,ActiveEspEnemy,ActiveEspChildren,ActiveEspPeltTrader,ActivateFly,AlrActivatedFlyPC,ActiveNoCooldownPrompt,ActiveNoFog,
-ActiveAuoChopTree,ActiveKillAura,ActivateInfiniteJump,ActiveNoclip = false,false,false,false,false,false,false,false,false,false,false,false,false
-local ParagraphInfoServer = InfoTab:CreateParagraph({Title = "Info", Content = "Loading"})
-local DistanceForKillAura = 25
-local DistanceForAutoChopTree = 25
+
 Rayfield:Notify({
    Title = "Thanks For Using Gojo Hub!",
    Content = "V.1.0",
-   Duration = 2,
+   Duration = 1,
    Image = "rewind",
 })
-local function DragItem(Item)
-game:GetService("ReplicatedStorage").RemoteEvents.RequestStartDraggingItem:FireServer(Item)
-wait(0.0000001)
-game:GetService("ReplicatedStorage").RemoteEvents.StopDraggingItem:FireServer(Item)
+
+-- Wait for game to load
+if not game:IsLoaded() then
+    local s = pcall(function() game.Loaded:Wait() end)
+    if not s then repeat task.wait() until game:IsLoaded() end
 end
+
+-- Only work in MM2
+if game.PlaceId ~= 142823291 then return end
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+-- Player variables
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+local RootPart = Humanoid and Humanoid.RootPart or Character:FindFirstChild("HumanoidRootPart") or Character:FindFirstChild("Torso") or Character:FindFirstChild("UpperTorso")
+
+-- Character setup
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    Humanoid = Character:WaitForChildOfClass("Humanoid")
+    RootPart = Humanoid.RootPart or Character:WaitForChild("HumanoidRootPart")
+end)
+
+local InfoTab = Window:CreateTab("❓Info")
+local MainTab = Window:CreateTab("🏠Main")
+local PlayerTab = Window:CreateTab("🙍‍♂Player")
+local TeleportTab = Window:CreateTab("⛳Teleport")
+local AutoFarmTab = Window:CreateTab("♻AutoFarm")
+local EspTab = Window:CreateTab("🟥Esp")
+local MiscTab = Window:CreateTab("➕Misc")
+local RolesTab = Window:CreateTab("🧏Roles")
+local SettingsTab = Window:CreateTab("⚙Settings")
+local ActivateFly,AlrActivatedFlyPC,ActivateInfiniteJump,ActiveNoclip = false,false,false,false,false,false,false,false,false,false,false,false,false
+local ParagraphInfoServer = InfoTab:CreateParagraph({Title = "Info", Content = "Loading"})
+
+-- Utility Functions
+local function getRoles()
+    local data = ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    local roles = {}
+    for plr, plrData in pairs(data) do
+        if not plrData.Dead then
+            roles[plr] = plrData.Role
+        end
+    end
+    return roles
+end
+
+local function getMurdererTarget()
+    local data = ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    for plr, plrData in pairs(data) do
+        if plrData.Role == "Murderer" then
+            local player = Players:FindFirstChild(plr)
+            if player then
+                if player == LocalPlayer then return nil, true end
+                local char = player.Character
+                if char then
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp then return hrp.Position, false end
+                    local head = char:FindFirstChild("Head")
+                    if head then return head.Position, false end
+                end
+            end
+        end
+    end
+    return nil, false
+end
+
+-- Roles Tab
+local rolesLabel = RolesTab:CreateLabel("Sheriff: None\nMurder: None")
+local sheriffName = "none"
+local murderName = "none"
+
+local function UpdateRoles()
+    sheriffName = "Waiting For Gun!"
+    murderName = "Waiting For Knife!"
+    
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character then
+            if player.Character:FindFirstChild("Gun") or 
+               (player.Backpack and player.Backpack:FindFirstChild("Gun")) then
+                sheriffName = player.Name
+            elseif player.Character:FindFirstChild("Knife") or 
+                  (player.Backpack and player.Backpack:FindFirstChild("Knife")) then
+                murderName = player.Name
+            end
+        end
+    end
+    
+    local sheriffText = "<font color='#00A2FF'>Sheriff: "..sheriffName.."</font>"
+    local murderText = "<font color='#FF0000'>Murder: "..murderName.."</font>"
+    rolesLabel:Set(sheriffText.."\n"..murderText)
+end
+
+game:GetService("RunService").Heartbeat:Connect(UpdateRoles)
+
+RolesTab:CreateButton({
+    Name = "Copy Roles",
+    Callback = function()
+        local namesToCopy = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
+        setclipboard(namesToCopy)
+        
+        Rayfield:Notify({
+   Title = "RolesCopied",
+   Content = "Roles Copied To Clipboard",
+   Duration = 2,
+   Image = nil,
+})
+    end,
+})
+
+RolesTab:CreateButton({
+    Name = "Send roles to chat",
+    Callback = function()
+        local message = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
+        
+        if game:GetService("TextChatService") then
+            local channel = game:GetService("TextChatService").TextChannels.RBXGeneral
+            if channel then
+                channel:DisplaySystemMessage(message)
+            else
+                warn("RBXGeneral channel not found!")
+            end
+        else
+            game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
+        end
+        
+        Rayfield:Notify({
+            Title = "Roles Sented",
+            Content = "Roles Sented To Chat",
+            Duration = 2,
+            Image = nil,
+        })
+    end,
+})
+
+local Button = InfoTab:CreateButton({
+   Name = "Copy DIscord",
+   Callback = function()
+        setclipboard("https://discord.gg/7WtejdcD")
+
+            Rayfield:Notify({
+   Title = "Discord Link Copied!",
+   Content = "Discord Copied!",
+   Duration = 3,
+   Image = nil,
+})
+   end,
+})
+
+local ButtonUnloadCheat = SettingsTab:CreateButton({
+   Name = "Unload Cheat",
+   Callback = function()
+  Rayfield:Destroy()
+end,
+})
+
+local Themes = {
+   ["Default"] = "Default",
+   ["Amber Glow"] = "AmberGlow",
+   ["Amethyst"] = "Amethyst",
+   ["Bloom"] = "Bloom",
+   ["Dark Blue"] = "DarkBlue",
+   ["Green"] = "Green",
+   ["Light"] = "Light",
+   ["Ocean"] = "Ocean",
+   ["Serenity"] = "Serenity"
+}
+
+local Dropdown = SettingsTab:CreateDropdown({
+   Name = "Change Theme",
+   Options = {"Default", "Amber Glow", "Amethyst", "Bloom", "Dark Blue", "Green", "Light", "Ocean", "Serenity"},
+   CurrentOption = selectedTheme,  -- pour afficher ce qui est réellement chargé
+   Flag = "ThemeSelection",
+   Callback = function(Selected)
+      local ident = Themes[Selected[1]]
+      Window.ModifyTheme(ident)  -- <— Applique le thème en direct
+   end, 
+})
+
 local function getServerInfo()
 	local Players = game:GetService("Players")
 	local playerCount = #Players:GetPlayers()
@@ -91,6 +262,31 @@ end
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+
+Rayfield:LoadConfiguration()
+task.spawn(function()
+while true do
+	task.wait(1) 
+task.spawn(function()
+	local updatedInfo = getServerInfo()
+	local updatedContent = string.format(
+		"📌 PlaceId: %s\n🔑 JobId: %s\n🧪 IsStudio: %s\n👥 Players: %d/%d",
+		updatedInfo.PlaceId,
+		updatedInfo.JobId,
+		
+		tostring(updatedInfo.IsStudio),
+		updatedInfo.CurrentPlayers,
+updatedInfo.MaxPlayers
+	)
+
+	ParagraphInfoServer:Set({
+		Title = "Info",
+		Content = updatedContent
+	})
+end)
+end
+
+end)
 
 local IYMouse = Players.LocalPlayer:GetMouse()
 local FLYING = false
@@ -279,266 +475,1338 @@ local function MobileFly()
 	end)
 end
 
-local function CreateEsp(Char, Color, Text,Parent,number)
-	if not Char then return end
-	if Char:FindFirstChild("ESP") and Char:FindFirstChildOfClass("Highlight") then return end
-	local highlight = Char:FindFirstChildOfClass("Highlight") or Instance.new("Highlight")
-	highlight.Name = "ESP_Highlight"
-highlight.Adornee = Char
-highlight.FillColor = Color
-highlight.FillTransparency = 1
-highlight.OutlineColor = Color
-highlight.OutlineTransparency = 0
-highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-highlight.Enabled = true
-	highlight.Parent = Char
+local PlayerFlySpeedSlider = PlayerTab:CreateSlider({
+   Name = "Fly Speed",
+   Range = {0, 10},
+   Increment = 0.1,
+   Suffix = "Fly Speed",
+   CurrentValue = 1,
+   Flag = "Slider2", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Callback = function(Value)
+CurrentValue = Value
+iyflyspeed = Value
+end,  iyflyspeed = CurrentValue,
+})
 
-	
-	local billboard = Char:FindFirstChild("ESP") or Instance.new("BillboardGui")
-	billboard.Name = "ESP"
-	billboard.Size = UDim2.new(0, 50, 0, 25)
-	billboard.AlwaysOnTop = true
-	billboard.StudsOffset = Vector3.new(0, number, 0)
-	billboard.Adornee = Parent
-	billboard.Enabled = true
-	billboard.Parent = Parent
-
-	
-	local label = billboard:FindFirstChildOfClass("TextLabel") or Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.BackgroundTransparency = 1
-	label.Text = Text
-	label.TextColor3 = Color
-	label.TextScaled = true
-	label.Parent = billboard
-
-	task.spawn(function()
-		local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-
-local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-
-while highlight and billboard and Parent and Parent.Parent do
-	local cameraPosition = Camera and Camera.CFrame.Position
-	if cameraPosition and Parent and Parent:IsA("BasePart") then
-	local distance = (cameraPosition - Parent.Position).Magnitude
-				task.spawn(function()
-if ActiveDistanceEsp then
-label.Text = Text.." ("..math.floor(distance + 0.5).." m)"
-else
-label.Text = Text
+local PlayerFlyToggle = PlayerTab:CreateToggle({
+   Name = "Fly",
+   CurrentValue = false,
+   Flag = "ButtonFly", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Callback = function(Value)
+  ActivateFly = Value 
+task.spawn(function()
+if not FLYING and ActivateFly then
+			if UserInputService.TouchEnabled then
+				MobileFly()
+			else
+task.spawn(function()
+if not AlrActivatedFlyPC then 
+AlrActivatedFlyPC = true
+Rayfield:Notify({
+   Title = "Fly",
+   Content = "When you enable to fly you can press F to fly/unfly (it won't disable the button!)",
+   Duration = 5,
+   Image = "rewind",
+})
 end
 end)
-
-	end
-
-	wait(0.1)
-end
-
-	end)
-end
-
-local function KeepEsp(Char,Parent)
-	if Char and Char:FindFirstChildOfClass("Highlight") and Parent:FindFirstChildOfClass("BillboardGui") then
-		Char:FindFirstChildOfClass("Highlight"):Destroy()
-		Parent:FindFirstChildOfClass("BillboardGui"):Destroy()
-	end
-end
-
-local function copyToClipboard(text)
-    if setclipboard then
-        setclipboard(text)
-    else
-        warn("setclipboard is not supported in this environment.")
-    end
-end
-local DiscordLink = DiscordTab:CreateButton({
-   Name = "Discord Link",
-   Callback = function()
-copyToClipboard("https://discord.gg/7WtejdcD")
-
-            Rayfield:Notify({
-   Title = "Discord Link Copied",
-   Content = "The discord link was copied to clipboard: https://discord.gg/7WtejdcD",
-   Duration = 1.5,
+				NOFLY()
+				wait()
+				sFLY()
+			end
+		elseif FLYING and not ActivateFly then
+			if UserInputService.TouchEnabled then
+				UnMobileFly()
+			else
+				NOFLY()
+			end
+		end
+end)
+end,
 })
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == Enum.KeyCode.F then
+		if not FLYING and ActivateFly then
+			if UserInputService.TouchEnabled then
+				MobileFly()
+			else
+				NOFLY()
+				wait()
+				sFLY()
+			end
+		elseif FLYING and ActivateFly then
+			if UserInputService.TouchEnabled then
+				UnMobileFly()
+			else
+				NOFLY()
+			end
+		end
+	end
+end)
+
+local ValueSpeed = 16
+local OldSpeed = Game.Players.LocalPlayer.Character.Humanoid.WalkSpeed
+local Slider = PlayerTab:CreateSlider({
+   Name = "Player Speed",
+   Range = {0, 100},
+   Increment = 1,
+   Suffix = "Speeds",
+   CurrentValue = 16,
+   Flag = "Slider1", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Callback = function(Value)
+CurrentValue = Value
+ValueSpeed = Value
+end,  ValueSpeed = CurrentValue,
+})
+local PlayerActiveModifyingSpeedToggle = PlayerTab:CreateToggle({
+   Name = "Active Modifying Player Speed",
+   CurrentValue = false,
+   Flag = "ButtonSpeed", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Callback = function(Value)
+  ActiveSpeedBoost = Value task.spawn(function()
+while ActiveSpeedBoost do
+Game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = ValueSpeed
+task.wait(0.1)
+end
+Game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = OldSpeed
+end)
 end,
 })
 
-local PlayerNoclipToggle = PlayerTab:CreateToggle({
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Добавляем переключатель ESP ролей
+EspTab:CreateToggle({
+   Name = "Esp Roles",
+   CurrentValue = false,
+   Flag = "RoleESP",
+   Callback = function(Value)
+      if Value then
+         -- Включение ESP
+         if not _G.RoleESP then
+            -- Цвета для ролей
+            local roleColors = {
+               Murderer = Color3.fromRGB(255, 0, 0),
+               Sheriff = Color3.fromRGB(0, 0, 255),
+               Hero = Color3.fromRGB(255, 255, 0),
+               Innocent = Color3.fromRGB(0, 255, 0),
+               Default = Color3.fromRGB(200, 200, 200)
+            }
+
+            -- Функция получения ролей
+            local function getRoles()
+               local success, data = pcall(function()
+                  return ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+               end)
+               if not success then return {} end
+               
+               local roles = {}
+               for plr, plrData in pairs(data) do
+                  if not plrData.Dead then
+                     roles[plr] = plrData.Role
+                  end
+               end
+               return roles
+            end
+
+            -- Очистка ESP
+            local function clearESP()
+               for _, player in ipairs(Players:GetPlayers()) do
+                  if player.Character then
+                     local head = player.Character:FindFirstChild("Head")
+                     if head and head:FindFirstChild("RoleESP") then
+                        head.RoleESP:Destroy()
+                     end
+                     if player.Character:FindFirstChild("RoleHighlight") then
+                        player.Character.RoleHighlight:Destroy()
+                     end
+                  end
+               end
+            end
+
+            -- Создание подсветки
+            local function applyHighlight(character, role)
+               local hl = Instance.new("Highlight")
+               hl.Name = "RoleHighlight"
+               hl.FillColor = roleColors[role] or roleColors.Default
+               hl.OutlineColor = Color3.new(1, 1, 1)
+               hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+               hl.FillTransparency = 0.4
+               hl.OutlineTransparency = 0
+               hl.Parent = character
+            end
+
+            -- Создание текста с ролью
+            local function createRoleLabel(head, role)
+               local esp = Instance.new("BillboardGui")
+               esp.Name = "RoleESP"
+               esp.Adornee = head
+               esp.Size = UDim2.new(4, 0, 4, 0)
+               esp.AlwaysOnTop = true
+               esp.Parent = head
+               
+               local label = Instance.new("TextLabel")
+               label.Name = "RoleLabel"
+               label.Parent = esp
+               label.Size = UDim2.new(1, 0, 1, 0)
+               label.BackgroundTransparency = 1
+               label.TextStrokeTransparency = 0
+               label.TextSize = 14
+               label.TextColor3 = roleColors[role] or roleColors.Default
+               label.Font = Enum.Font.FredokaOne
+               label.Text = role -- Только роль без имени
+            end
+
+            -- Обновление ESP
+            local function updateESP()
+               local roles = getRoles()
+               for _, player in ipairs(Players:GetPlayers()) do
+                  if player ~= LocalPlayer and player.Character then
+                     local head = player.Character:FindFirstChild("Head")
+                     if head then
+                        local role = roles[player.Name] or "Default"
+                        
+                        -- Обновляем текст роли
+                        if not head:FindFirstChild("RoleESP") then
+                           createRoleLabel(head, role)
+                        else
+                           local label = head.RoleESP.RoleLabel
+                           if label then
+                              label.Text = role
+                              label.TextColor3 = roleColors[role] or roleColors.Default
+                           end
+                        end
+                        
+                        -- Обновляем подсветку
+                        if not player.Character:FindFirstChild("RoleHighlight") then
+                           applyHighlight(player.Character, role)
+                        else
+                           player.Character.RoleHighlight.FillColor = roleColors[role] or roleColors.Default
+                        end
+                     end
+                  end
+               end
+            end
+
+            -- Запускаем обновление
+            _G.RoleESP = {
+               Connection = game:GetService("RunService").Heartbeat:Connect(function()
+                  pcall(updateESP)
+                  task.wait(0.3)
+               end),
+               
+               Disconnect = function(self)
+                  self.Connection:Disconnect()
+                  clearESP()
+               end
+            }
+         end
+      else
+         -- Отключение ESP
+         if _G.RoleESP then
+            _G.RoleESP:Disconnect()
+            _G.RoleESP = nil
+         end
+      end
+   end
+})
+
+PlayerTab:CreateToggle({
+   Name = "Infinity Jump",
+   CurrentValue = false,
+   Flag = "InfJump",
+   Callback = function(Value)
+        getgenv().InfiniteJump = Value
+        
+        if Value then
+            UserInputService.JumpRequest:Connect(function()
+                if getgenv().InfiniteJump and Character and Humanoid then
+                    Humanoid:ChangeState("Jumping")
+                end
+            end)
+            Rayfield:Notify({
+                Title = "Infinite Jump",
+                Content = "Enabled infinite jump",
+                Duration = 2,
+                Image = 4483362458
+            })
+        end
+    end
+})
+
+PlayerTab:CreateToggle({
    Name = "Noclip",
    CurrentValue = false,
-   Flag = "ButtonNoclip", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Flag = "Noclip",
    Callback = function(Value)
-  ActiveNoclip = Value 
-task.spawn(function()
-while ActiveNoclip do 
-task.spawn(function()
-if Game.Players.LocalPlayer.Character then
-for _, Parts in pairs(Game.Players.LocalPlayer.Character:GetDescendants()) do
-if Parts:isA("BasePart") and Parts.CanCollide then
-Parts.CanCollide = false
-end
-end
-end
-end)
-task.wait(0.1)
-end 
-if Game.Players.LocalPlayer.Character then
-for _, Parts in pairs(Game.Players.LocalPlayer.Character:GetDescendants()) do
-if Parts:isA("BasePart") and not Parts.CanCollide then
-Parts.CanCollide = true
-end
-end
-end
-end)
-end,
-})
-local PlayerInfiniteJumpToggle = PlayerTab:CreateToggle({
-   Name = "Infinite Jump",
-   CurrentValue = false,
-   Flag = "ButtonInfiniteJump", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
-   Callback = function(Value)
-                local InfiniteJumpEnabled = true
-game:GetService("UserInputService").JumpRequest:connect(function()
-    if InfiniteJumpEnabled then
-        game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+        getgenv().Noclip = Value
+        
+        if not Value then
+            if Character then
+                for _, part in pairs(Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+            return
+        end
+        
+        Rayfield:Notify({
+            Title = "Noclip",
+            Content = "Enabled noclip",
+            Duration = 2,
+            Image = 4483362458
+        })
+        
+        local noclipLoop
+        noclipLoop = game:GetService("RunService").Stepped:Connect(function()
+            if not getgenv().Noclip or not Character then
+                noclipLoop:Disconnect()
+                return
+            end
+            
+            for _, part in pairs(Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end)
     end
-end)
-   end,
 })
 
-local EspItemsToggle = EspTab:CreateToggle({
-   Name = "Items Esp",
+local JumpPowerSlider = PlayerTab:CreateSlider({
+   Name = "JumpPower",
+   Range = {50, 500},
+   Increment = 1,
+   Suffix = "power",
+   CurrentValue = 50,
+   Flag = "JumpPower",
+   Callback = function(Value)
+        if Humanoid then
+            Humanoid.JumpPower = Value
+            getgenv().Jumppower = Value
+        end
+    end
+})
+
+PlayerTab:CreateToggle({
+   Name = "Godmode",
    CurrentValue = false,
-   Flag = "EspItems",
+   Flag = "Godmode",
    Callback = function(Value)
-  ActiveEspItems = Value 
-task.spawn(function()
-while ActiveEspItems do 
-task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Items:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and not Obj:FindFirstChildOfClass("Highlight") and not Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-CreateEsp(Obj,Color3.fromRGB(255,255,0),Obj.Name,Obj.PrimaryPart) 
-end 
-end
-end)
-task.wait(0.1)
-end task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Items:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and  Obj:FindFirstChildOfClass("Highlight") and Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-KeepEsp(Obj,Obj.PrimaryPart)
-end 
-end
-end)
-end)
-end,
+        getgenv().enableGodmode = Value
+        
+        local godcon
+        local function UpdateGod()
+            if godcon then
+                godcon:Disconnect()
+                godcon = nil
+            end
+            
+            if Humanoid and getgenv().enableGodmode then
+                godcon = Humanoid.HealthChanged:Connect(function()
+                    if Humanoid.Health < Humanoid.MaxHealth then
+                        Humanoid.Health = Humanoid.MaxHealth
+                    end
+                end)
+            end
+        end
+        
+        if Value then
+            Rayfield:Notify({
+                Title = "Godmode",
+                Content = "Enabled godmode",
+                Duration = 2,
+                Image = 4483362458
+            })
+            UpdateGod()
+            
+            LocalPlayer.CharacterAdded:Connect(function(newChar)
+                Character = newChar
+                Humanoid = Character:WaitForChildOfClass("Humanoid")
+                UpdateGod()
+            end)
+        else
+            if godcon then
+                godcon:Disconnect()
+                godcon = nil
+            end
+        end
+    end
 })
-local EspEnemyToggle = EspTab:CreateToggle({
-   Name = "Enemy Esp",
+
+TeleportTab:CreateButton({
+   Name = "Teleport To Map",
+   Callback = function()
+        local map = Workspace:FindFirstChild("CoinContainer", true)
+        if map and map.Parent then
+            local part = map:FindFirstChildWhichIsA("BasePart", true) or map.Parent:FindFirstChildWhichIsA("BasePart", true)
+            if part and part.CFrame then
+                if Character then
+                    Character:PivotTo(part.CFrame * CFrame.new(0, 2, 0))
+                elseif RootPart then
+                    RootPart.CFrame = part.CFrame * CFrame.new(0, 2, 0)
+                end
+                Rayfield:Notify({
+                    Title = "Teleported",
+                    Content = "Teleported to map",
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "Map not found",
+                Duration = 2,
+                Image = 7733658504
+            })
+        end
+    end
+})
+
+TeleportTab:CreateButton({
+   Name = "Teleport To Lobby",
+   Callback = function()
+        local lobby = Workspace:FindFirstChild("Lobby", true)
+        if lobby and lobby.Parent then
+            local part = lobby:FindFirstChildWhichIsA("BasePart", true) or lobby.Parent:FindFirstChildWhichIsA("BasePart", true)
+            if part and part.CFrame then
+                if Character then
+                    Character:PivotTo(part.CFrame * CFrame.new(0, 2, 0))
+                elseif RootPart then
+                    RootPart.CFrame = part.CFrame * CFrame.new(0, 2, 0)
+                end
+                Rayfield:Notify({
+                    Title = "Teleported",
+                    Content = "Teleported to lobby",
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "Lobby not found",
+                Duration = 2,
+                Image = 7733658504
+            })
+        end
+    end
+})
+
+local function SHubFling(TargetPlayer)
+    if not (Character and Humanoid and RootPart) then return end
+    local TCharacter = TargetPlayer.Character
+    if not TCharacter then return end
+    local THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle")
+    
+    getgenv().OldPos = RootPart.CFrame
+    Workspace.CurrentCamera.CameraSubject = THead or Handle or THumanoid
+    
+    local function FPos(BasePart, Pos, Ang)
+        local targetCF = CFrame.new(BasePart.Position) * Pos * Ang
+        RootPart.CFrame = targetCF
+        Character:SetPrimaryPartCFrame(targetCF)
+        RootPart.Velocity = Vector3.new(9e7, 9e8, 9e7)
+        RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+    end
+    
+    local function SFBasePart(BasePart)
+        local start = tick()
+        local angle = 0
+        getgenv().timeout = getgenv().timeout or 2.5
+        
+        repeat
+            if RootPart and THumanoid then
+                angle += 100
+                for _, offset in ipairs{
+                    CFrame.new(0, 1.5, 0),
+                    CFrame.new(0, -1.5, 0),
+                    CFrame.new(2.25, 1.5, -2.25),
+                    CFrame.new(-2.25, -1.5, 2.25)
+                } do
+                    FPos(BasePart, offset + THumanoid.MoveDirection, CFrame.Angles(math.rad(angle), 0, 0))
+                    task.wait()
+                end
+            end
+        until BasePart.Velocity.Magnitude > 500 or tick() - start > getgenv().timeout
+    end
+    
+    local BV = Instance.new("BodyVelocity")
+    BV.Name = "FlingVelocity"
+    BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+    BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    BV.Parent = RootPart
+    
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    local target = TRootPart or THead or Handle
+    if target then SFBasePart(target) end
+    
+    BV:Destroy()
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+    Workspace.CurrentCamera.CameraSubject = Humanoid
+    
+    repeat
+        local cf = getgenv().OldPos * CFrame.new(0, .5, 0)
+        RootPart.CFrame = cf
+        Character:SetPrimaryPartCFrame(cf)
+        Humanoid:ChangeState("GettingUp")
+        
+        for _, part in ipairs(Character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Velocity, part.RotVelocity = Vector3.zero, Vector3.zero
+            end
+        end
+        task.wait()
+    until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+end
+
+MiscTab:CreateButton({
+   Name = "Fling Murderer",
+   Callback = function()
+        local Murderer = nil
+        for plr, role in getRoles() do
+            if role == "Murderer" then
+                Murderer = Players:FindFirstChild(plr)
+                break
+            end
+        end
+        
+        if Murderer and Murderer ~= LocalPlayer then
+            SHubFling(Murderer)
+            Rayfield:Notify({
+                Title = "Flinging Murderer",
+                Content = Murderer.Name,
+                Duration = 2,
+                Image = 4483362458
+            })
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "No murderer found",
+                Duration = 2,
+                Image = 7733658504
+            })
+        end
+    end
+})
+
+MiscTab:CreateButton({
+   Name = "Fling Sheriff/Hero",
+   Callback = function()
+        local Target = nil
+        for plr, role in getRoles() do
+            if role == "Sheriff" or role == "Hero" then
+                Target = Players:FindFirstChild(plr)
+                break
+            end
+        end
+        
+        if Target and Target ~= LocalPlayer then
+            SHubFling(Target)
+            Rayfield:Notify({
+                Title = "Flinging Sheriff/Hero",
+                Content = Target.Name,
+                Duration = 2,
+                Image = 4483362458
+            })
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "No sheriff/hero found",
+                Duration = 2,
+                Image = 7733658504
+            })
+        end
+    end
+})
+
+-- Player Selection
+local playerList = {}
+local selectedPlayer = nil
+
+local function updatePlayerList()
+    playerList = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerList, player.Name)
+        end
+    end
+end
+
+updatePlayerList()
+
+local PlayerDropdown = MiscTab:CreateDropdown({
+   Name = "Select Player",
+   Options = playerList,
+   CurrentOption = "",
+   Flag = "PlayerSelect",
+   Callback = function(Option)
+        selectedPlayer = Option
+    end
+})
+
+Players.PlayerAdded:Connect(function()
+    updatePlayerList()
+    PlayerDropdown:Refresh(playerList)
+end)
+
+Players.PlayerRemoving:Connect(function()
+    updatePlayerList()
+    PlayerDropdown:Refresh(playerList)
+end)
+
+MiscTab:CreateButton({
+   Name = "Fling Selected Player",
+   Callback = function()
+        if selectedPlayer then
+            local player = Players:FindFirstChild(selectedPlayer)
+            if player and player ~= LocalPlayer then
+                SHubFling(player)
+                Rayfield:Notify({
+                    Title = "Flinging Player",
+                    Content = player.Name,
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Error",
+                    Content = "Player not found",
+                    Duration = 2,
+                    Image = 7733658504
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "No player selected",
+                Duration = 2,
+                Image = 7733658504
+            })
+        end
+    end
+})
+
+MainTab:CreateButton({
+   Name = "Grab Gun",
+   Callback = function()
+        if Character and RootPart then
+            local gun = Workspace:FindFirstChild("GunDrop", true)
+            if gun then
+                if firetouchinterest then
+                    firetouchinterest(RootPart, gun, 0)
+                    firetouchinterest(RootPart, gun, 1)
+                else
+                    gun.CFrame = RootPart.CFrame
+                end
+                Rayfield:Notify({
+                    Title = "Gun Grabbed",
+                    Content = "Successfully grabbed the gun",
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Error",
+                    Content = "No gun found in workspace",
+                    Duration = 2,
+                    Image = 7733658504
+                })
+            end
+        end
+    end
+})
+
+MainTab:CreateToggle({
+   Name = "Auto Grab Gun",
    CurrentValue = false,
-   Flag = "EspEnemy",
+   Flag = "AutoGrabGun",
    Callback = function(Value)
-  ActiveEspEnemy = Value 
-task.spawn(function()
-while ActiveEspEnemy do 
-task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and (Obj.Name ~= "Lost Child" or Obj.Name ~= "Lost Child2" or Obj.Name ~= "Lost Child3" or Obj.Name ~= "Lost Child4" or Obj.Name ~= "Pelt Trader") and not Obj:FindFirstChildOfClass("Highlight") and not Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-CreateEsp(Obj,Color3.fromRGB(255,0,0),Obj.Name,Obj.PrimaryPart) 
-end 
-end
-end)
-task.wait(0.1)
-end task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and (Obj.Name ~= "Lost Child" or Obj.Name ~= "Lost Child2" or Obj.Name ~= "Lost Child3" or Obj.Name ~= "Lost Child4" or Obj.Name ~= "Pelt Trader") and Obj:FindFirstChildOfClass("Highlight") and Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-KeepEsp(Obj,Obj.PrimaryPart)
-end 
-end
-end)
-end)
-end,
+        getgenv().AGG = Value
+        
+        if Value then
+            Rayfield:Notify({
+                Title = "Auto Grab Enabled",
+                Content = "Will automatically grab guns when available",
+                Duration = 2,
+                Image = 4483362458
+            })
+        end
+        
+        local aggLoop
+        aggLoop = game:GetService("RunService").Heartbeat:Connect(function()
+            if not getgenv().AGG then
+                aggLoop:Disconnect()
+                return
+            end
+            
+            if Character and RootPart then
+                local gun = Workspace:FindFirstChild("GunDrop", true)
+                if gun then
+                    if firetouchinterest then
+                        firetouchinterest(RootPart, gun, 0)
+                        firetouchinterest(RootPart, gun, 1)
+                    else
+                        gun.CFrame = RootPart.CFrame
+                    end
+                end
+            end
+        end)
+    end
 })
-local EspChildrensToggle = EspTab:CreateToggle({
-   Name = "Childrens Esp",
+
+MainTab:CreateButton({
+   Name = "Steal Gun (From Sheriff/Hero)",
+   Callback = function()
+        if Character and Humanoid then
+            local stolen = false
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    if p.Character and p.Character:FindFirstChild("Gun") then
+                        p.Character:FindFirstChild("Gun").Parent = Character
+                        Humanoid:EquipTool(Character:FindFirstChild("Gun"))
+                        Humanoid:UnequipTools()
+                        stolen = true
+                    elseif p:FindFirstChild("Backpack") and p.Backpack:FindFirstChild("Gun") then
+                        p.Backpack:FindFirstChild("Gun").Parent = LocalPlayer.Backpack
+                        Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Gun"))
+                        Humanoid:UnequipTools()
+                        stolen = true
+                    end
+                end
+            end
+            
+            if stolen then
+                Rayfield:Notify({
+                    Title = "Success",
+                    Content = "Stole gun from Sheriff/Hero",
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Error",
+                    Content = "No guns found to steal",
+                    Duration = 2,
+                    Image = 7733658504
+                })
+            end
+        end
+    end
+})
+
+EspTab:CreateToggle({
+   Name = "ESP Gun",
    CurrentValue = false,
-   Flag = "EspChildrens",
+   Flag = "GunESP",
    Callback = function(Value)
-  ActiveEspChildren = Value 
-task.spawn(function()
-while ActiveEspChildren do 
-task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and (Obj.Name == "Lost Child" or Obj.Name == "Lost Child2" or Obj.Name == "Lost Child3" or Obj.Name == "Lost Child4") and not Obj:FindFirstChildOfClass("Highlight") and not Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-CreateEsp(Obj,Color3.fromRGB(0,255,0),Obj.Name,Obj.PrimaryPart) 
-end 
-end
-end)
-task.wait(0.1)
-end task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and (Obj.Name == "Lost Child" or Obj.Name == "Lost Child2" or Obj.Name == "Lost Child3" or Obj.Name == "Lost Child4") and Obj:FindFirstChildOfClass("Highlight") and Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-KeepEsp(Obj,Obj.PrimaryPart)
-end 
-end
-end)
-end)
-end,
+        getgenv().GunEsp = Value
+        
+        local function clearGunESP()
+            local gun = Workspace:FindFirstChild("GunDrop", true)
+            if gun then
+                if gun:FindFirstChild("GunHighlight") then
+                    gun:FindFirstChild("GunHighlight"):Destroy()
+                end
+                if gun:FindFirstChild("GunEsp") then
+                    gun:FindFirstChild("GunEsp"):Destroy()
+                end
+            end
+        end
+        
+        if not Value then
+            clearGunESP()
+            return
+        end
+        
+        local gunEspLoop
+        gunEspLoop = game:GetService("RunService").Heartbeat:Connect(function()
+            if not getgenv().GunEsp then
+                gunEspLoop:Disconnect()
+                clearGunESP()
+                return
+            end
+            
+            local gun = Workspace:FindFirstChild("GunDrop", true)
+            if gun then
+                if not gun:FindFirstChild("GunHighlight") then
+                    local gunh = Instance.new("Highlight", gun)
+                    gunh.Name = "GunHighlight"
+                    gunh.FillColor = Color3.new(1, 1, 0)
+                    gunh.OutlineColor = Color3.new(1, 1, 1)
+                    gunh.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    gunh.FillTransparency = 0.4
+                    gunh.OutlineTransparency = 0.5
+                end
+                
+                if not gun:FindFirstChild("GunEsp") then
+                    local esp = Instance.new("BillboardGui")
+                    esp.Name = "GunEsp"
+                    esp.Adornee = gun
+                    esp.Size = UDim2.new(5, 0, 5, 0)
+                    esp.AlwaysOnTop = true
+                    esp.Parent = gun
+                    
+                    local text = Instance.new("TextLabel", esp)
+                    text.Name = "GunLabel"
+                    text.Size = UDim2.new(1, 0, 1, 0)
+                    text.BackgroundTransparency = 1
+                    text.TextStrokeTransparency = 0
+                    text.TextColor3 = Color3.fromRGB(255, 255, 0)
+                    text.Font = Enum.Font.FredokaOne
+                    text.TextSize = 16
+                    text.Text = "Gun Drop"
+                end
+            end
+        end)
+    end
 })
-local EspPeltTraderToggle = EspTab:CreateToggle({
-   Name = "Pelt Trader Esp",
-   CurrentValue = false,
-   Flag = "EspPeltTrader",
-   Callback = function(Value)
-  ActiveEspPeltTrader = Value 
-task.spawn(function()
-while ActiveEspPeltTrader do 
-task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and Obj.Name == "Pelt Trader" and not Obj:FindFirstChildOfClass("Highlight") and not Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-CreateEsp(Obj,Color3.fromRGB(0,255,255),Obj.Name,Obj.PrimaryPart) 
-end 
-end
-end)
-task.wait(0.1)
-end task.spawn(function()
- for _,Obj in pairs(Game.Workspace.Characters:GetChildren()) do 
-if Obj:isA("Model") and Obj.PrimaryPart and Obj.Name == "Pelt Trader" and Obj:FindFirstChildOfClass("Highlight") and Obj.PrimaryPart:FindFirstChildOfClass("BillboardGui") then
-KeepEsp(Obj,Obj.PrimaryPart)
-end 
-end
-end)
-end)
-end,
+
+-- AutoFarm Section
+local AutoFarmToggle = AutoFarmTab:CreateToggle({
+    Name = "Auto Farm Coins",
+    CurrentValue = false,
+    Flag = "AutoFarmEnabled",
+    Callback = function(Value)
+        getgenv().AutoFarm = Value
+        
+        -- State variables
+        local Octree = loadstring(game:HttpGet("https://raw.githubusercontent.com/Sleitnick/rbxts-octo-tree/main/src/init.lua", true))()
+
+        local rt = {} -- Removable table
+        rt.__index = rt
+        rt.octree = Octree.new()
+
+        rt.RoundInProgress = false
+
+        rt.Players = game.Players
+        rt.player = game.Players.LocalPlayer
+
+        rt.coinContainer = nil
+        rt.radius = 200 :: number -- Radius to search for coins
+        rt.walkspeed = 30 :: number -- speed at which you will go to a coin measured in walkspeed
+        rt.touchedCoins = {} -- Table to track touched coins
+        rt.positionChangeConnections = setmetatable({}, { __mode = "v" }) -- Weak table for connections
+        rt.Added = nil :: RBXScriptConnection
+        rt.Removing = nil :: RBXScriptConnection
+
+        rt.UserDied = nil :: RBXScriptConnection
+
+        local State = {
+            Action = "Action",
+            StandStillWait = "StandStillWait",
+            WaitingForRound = "WaitingForRound",
+            WaitingForRoundEnd = "WaitingForRoundEnd",
+            RespawnState = "RespawnState"
+        }
+
+        local CurrentState = State.WaitingForRound
+        local LastPosition = nil
+        local RoundInProgress = function()
+            return rt.RoundInProgress
+        end
+        local BagIsFull = false
+
+        -- Constants
+        rt.RoleTracker1 = nil :: RBXScriptConnection
+        rt.RoleTracker2 = nil :: RBXScriptConnection
+        rt.InvalidPos = nil :: RBXScriptConnection
+        local IsMurderer = false
+        local Working = false
+        local ROUND_TIMER = workspace:WaitForChild("RoundTimerPart").SurfaceGui.Timer
+        local PLAYER_GUI = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+        function rt:Message(_Title, _Text, Time)
+            game:GetService("StarterGui"):SetCore("SendNotification", { Title = _Title, Text = _Text, Duration = Time })
+        end
+
+        function rt:Character() : (Model)
+            return self.player.Character or self.player.CharacterAdded:Wait()
+        end
+
+        function rt:GetCharacterLoaded() : (Model)
+            repeat
+                task.wait(0.02)
+            until rt:Character() ~= nil
+        end
+
+        function rt:CheckIfPlayerIsInARound() : (boolean)
+            if not PLAYER_GUI:WaitForChild("MainGUI") then return false end
+
+            if PLAYER_GUI:WaitForChild("MainGUI").Game.Timer.Visible then
+                return true
+            end
+
+            if PLAYER_GUI:WaitForChild("MainGUI").Game.EarnedXP.Visible then
+                return true
+            end
+
+            return false
+        end
+
+        function rt:MainGUI() : (ScreenGui)
+            return self.player.PlayerGui.MainGUI or self.player.PlayerGui:WaitForChild("MainGUI")
+        end
+
+        function rt.Disconnect(connection:RBXScriptConnection)
+            if connection and connection.Connected then
+                connection:Disconnect()
+            end
+        end
+
+        function rt:Map() : (Model | nil)
+            for _, v in workspace:GetDescendants() do
+                if v.Name == "Spawns" and v.Parent.Name ~= "Lobby"  then
+                    return v.Parent
+                end
+            end
+            return nil
+        end
+
+        function rt:CheckIfGameInProgress() : (boolean)
+            if rt:Map() then return true end
+            return false
+        end
+
+        function rt:GetAlivePlayers(): (table | nil)
+            local aliveplrs = setmetatable({}, {__mode = "v"})
+            local OldPos = self:Character():GetPivot()
+            local pos = CFrame.new(-121.995956, 134.462997, 46.4180717)
+            
+            if not rt:CheckIfGameInProgress() then return nil end
+
+            local isAlive = rt:CheckIfPlayerIsInARound()
+
+            if not isAlive then self:Character():PivotTo(pos) end
+
+            for _, v in pairs(rt.Players:GetPlayers()) do
+                local distance = (self:Character().PrimaryPart.Position - v.Character.PrimaryPart.Position).Magnitude
+                if isAlive then
+                    if distance <= 500 then
+                        table.insert(aliveplrs, v)
+                    end
+                else
+                    if distance > 500 then
+                        table.insert(aliveplrs, v)
+                    end
+                end
+            end
+
+            if not isAlive then self:Character():PivotTo(OldPos) end
+            
+            return aliveplrs
+        end
+
+        function rt:CheckIfPlayerWasInARound() : (boolean)
+            if self.player:GetAttribute("Alive") then
+                return true
+            end
+
+            return false
+        end
+
+        function rt:IsElite() : (boolean)
+            if self.player:GetAttribute("Elite") then
+                return true
+            end
+
+            return false
+        end
+
+        local function AutoFarmCleanUp()
+            if next(rt.positionChangeConnections) == nil then
+                return rt:Message("Info", "Nothing to clean", 1)
+            end
+
+            for _, connection in pairs(rt.positionChangeConnections) do
+                rt.Disconnect(connection)
+            end
+            rt.Disconnect(rt.Added)
+            rt.Disconnect(rt.Removing)
+
+            rt:Message("Info", "Autofarm CleanUp Success", 2)
+            table.clear(rt.touchedCoins)
+            table.clear(rt.positionChangeConnections)
+            rt.octree:ClearAllNodes()
+        end
+
+        local function isCoinTouched(coin)
+            return rt.touchedCoins[coin]
+        end
+
+        local function markCoinAsTouched(coin)
+            if not rt then return end
+            rt.touchedCoins[coin] = true
+            local node = rt.octree:FindFirstNode(coin)
+            if node then
+                rt.octree:RemoveNode(node)
+            end
+        end
+
+        local function setupTouchTracking(coin)
+            local touchInterest = coin:FindFirstChildWhichIsA("TouchTransmitter")
+            if touchInterest then
+                local connection
+                connection = touchInterest.AncestryChanged:Connect(function(_, parent)
+                    if not rt then connection:Disconnect() return end
+                    if parent == nil then
+                        markCoinAsTouched(coin)
+                        rt.Disconnect(connection)
+                    end
+                end)
+                rt.positionChangeConnections[coin] = connection
+            end
+        end
+
+        local function setupPositionTracking(coin: MeshPart, LastPositonY: number)
+            local connection
+            connection = coin:GetPropertyChangedSignal("Position"):Connect(function()
+                local currentY = coin.Position.Y
+                if LastPositonY and LastPositonY ~= currentY then
+                    markCoinAsTouched(coin)
+                    rt.Disconnect(connection)
+                    coin:Destroy()
+                    return
+                end
+            end)
+            rt.positionChangeConnections[coin] = connection
+        end
+
+        local function moveToPositionSlowly(targetPosition: Vector3, duration: number)
+            local startPosition = rt:Character().PrimaryPart.Position
+            local startTime = tick()
+
+            local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
+            if nearestNode then
+                local closestCoin = nearestNode.Object
+                if not isCoinTouched(closestCoin) then
+                    local targetPosition2 = closestCoin.Position
+                    if targetPosition ~= targetPosition2 then 
+                        targetPosition = targetPosition2
+                    end
+                end
+            end
+            
+            while true do
+                local elapsedTime = tick() - startTime
+                local alpha = math.min(elapsedTime / duration, 1)
+
+                if rt:Character() == nil then break end
+
+                rt:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
+
+                if alpha >= 1 then
+                    task.wait(0.2)
+                    break
+                end
+
+                task.wait()
+            end
+        end
+
+        local function populateOctree()
+            rt.octree:ClearAllNodes()
+
+            for _, descendant in pairs(rt.coinContainer:GetDescendants()) do
+                if descendant:IsA("TouchTransmitter") then
+                    local parentCoin = descendant.Parent
+                    if not isCoinTouched(parentCoin) then
+                        rt.octree:CreateNode(parentCoin.Position, parentCoin)
+                        setupTouchTracking(parentCoin)
+                    end
+                    setupPositionTracking(parentCoin, parentCoin.Position.Y)
+                end
+            end
+
+            rt.Added = rt.coinContainer.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("TouchTransmitter") then
+                    local parentCoin = descendant.Parent
+                    if not isCoinTouched(parentCoin) then
+                        rt.octree:CreateNode(parentCoin.Position, parentCoin)
+                        setupTouchTracking(parentCoin)
+                        setupPositionTracking(parentCoin, parentCoin.Position.Y)
+                    end
+                end
+            end)
+
+            rt.Removing = rt.coinContainer.DescendantRemoving:Connect(function(descendant)
+                if descendant:IsA("TouchTransmitter") and descendant.Parent.Name == "Coin_Server" then
+                    local parentCoin = descendant.Parent
+                    if isCoinTouched(parentCoin) then
+                        markCoinAsTouched(parentCoin)
+                    end
+                end
+            end)
+        end
+
+        local function ChangeState(State)
+            CurrentState = State
+        end
+
+        local function CheckMurderer()
+            return IsMurderer
+        end
+
+        local function IsBagFull()
+            local playerGui = PLAYER_GUI:WaitForChild("MainGUI")
+            local coinText = playerGui.Game.CoinBags.Container.SnowToken.CurrencyFrame.Icon.Coins.Text
+            return tonumber(coinText) >= (rt:IsElite() and 50 or 40)
+        end
+
+        local function RespawnAndTeleportBack()
+            LastPosition = LastPosition ~= nil and LastPosition or rt:Character():GetPivot()
+            rt:Character():FindFirstChildWhichIsA("Humanoid"):ChangeState(Enum.HumanoidStateType.Dead)
+            rt:GetCharacterLoaded()
+            task.wait(1)
+            
+            if rt:Character() then
+                if not RoundInProgress() then rt:GetCharacterLoaded() return ChangeState(State.WaitingForRound) end
+                rt:GetCharacterLoaded()
+                rt:Character():PivotTo(LastPosition)
+            end
+        end
+
+        local function CollectCoins()
+            Working = true
+            rt.coinContainer = rt:Map():FindFirstChild("CoinContainer")
+            populateOctree()
+            while CurrentState == State.Action do
+                if IsBagFull() then
+                    rt:Message("Alert", "Bag is full!", 2)
+                    BagIsFull = true
+                    break
+                end
+
+                if rt:Character() == nil then
+                    break
+                end
+
+                local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
+                if nearestNode then
+                    local closestCoin = nearestNode.Object
+                    if not isCoinTouched(closestCoin) then
+                        local targetPosition = closestCoin.Position
+                        local duration = (rt:Character().PrimaryPart.Position - targetPosition).Magnitude / rt.walkspeed
+                        moveToPositionSlowly(targetPosition, duration)
+                        markCoinAsTouched(closestCoin)
+                        task.wait(0.2)
+                    end
+                else
+                    task.wait(1)
+                end
+            end
+            AutoFarmCleanUp()
+        end
+
+        local function RespawnState()
+            rt:Message("Info", "Respawning...", 2)
+            rt:GetCharacterLoaded()
+            task.wait(1)
+            if LastPosition == nil then LastPosition = rt:GetAlivePlayers()[1] end
+            if rt:Character() then
+                rt:GetCharacterLoaded()
+                rt:Character():PivotTo(LastPosition)
+            end
+            rt:Message("Info", "Respawned!", 2)
+
+            if not RoundInProgress() then
+                rt:Message("Info", "Round ended during respawn!", 2)
+                ChangeState(State.WaitingForRound)
+                return
+            end
+
+            ChangeState(State.Action)
+        end
+
+        local function WaitingForRound()
+            rt:Message("Info", "Waiting for round to start...", 2)
+            Working = false
+            repeat
+                task.wait(0.5)
+            until RoundInProgress() and rt:CheckIfPlayerWasInARound()
+
+            rt:Message("Alert", "Round started!", 2)
+            ChangeState(State.Action)
+        end
+
+        local function waitForRoundEnd()
+            rt:Message("Info", "Waiting for round to end...", 2)
+            Working = false
+            repeat
+                task.wait(1)
+            until not RoundInProgress()
+
+            rt:Message("Alert", "Round ended!", 2)
+            ChangeState(State.WaitingForRound)
+        end
+
+        local function StandStillWait()
+            rt:Message("Info", "Waiting for murderer to respawn", 2)
+            ChangeState("Nothing")
+            rt:GetCharacterLoaded()
+            task.wait(2)
+            ChangeState(State.WaitingForRound)
+        end
+
+        local function ActionState()
+            LastPosition = nil
+            if CheckMurderer() then
+                rt:Message("Info", "You are the Murderer! Collecting coins...", 2)
+                CollectCoins()
+            else
+                rt:Message("Info", "Logging position and respawning...", 2)
+                CollectCoins()
+            end
+
+            if BagIsFull or not RoundInProgress() then
+                if CheckMurderer() then
+                    rt:Message("Info", "Returning to Waiting State...", 2)
+                    BagIsFull, Working, rt.RoundInProgress = false, false, false
+                    rt:Character():FindFirstChildWhichIsA("Humanoid"):ChangeState(Enum.HumanoidStateType.Dead)
+                else
+                    rt:Message("Info", "Returning to Waiting State...", 2)
+                    BagIsFull, Working = false, false
+                    rt:Character():FindFirstChildWhichIsA("Humanoid"):ChangeState(Enum.HumanoidStateType.Dead)
+                    ChangeState(State.WaitingForRoundEnd)
+                end
+            end
+        end
+
+        -- Initialize auto farm
+        if Value then
+            rt.RoleTracker1 = rt.player.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("Tool") then
+                    if descendant.Name == "Knife" then
+                        IsMurderer = true
+                    end
+                end
+            end)
+
+            rt.InvalidPos = workspace.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("Model") then
+                    if string.match(descendant.Name, "Glitch") and descendant.Parent.Name ~= "Lobby" then
+                        descendant:Destroy()
+                    end
+
+                    if string.match(descendant.Name, "Invis") and descendant.Parent.Name ~= "Lobby" then
+                        descendant:Destroy()
+                    end
+                end
+            end)
+
+            -- Monitor round start
+            local LastText
+            ROUND_TIMER:GetPropertyChangedSignal("Text"):Connect(function()
+                rt.RoundInProgress = true
+            end)
+
+            PLAYER_GUI.ChildAdded:Connect(function(child)
+                if child:IsA("Sound") then
+                    rt.RoundInProgress = false
+                    Working = false
+                    ChangeState(State.WaitingForRound)
+                end
+            end)
+
+            rt.UserDied = rt.player.CharacterRemoving:Connect(function(character)
+                AutoFarmCleanUp()
+                LastText = ROUND_TIMER.Text
+                if CheckMurderer() then IsMurderer = false; LastPosition = nil; Working = false; rt.RoundInProgress = false return ChangeState(State.StandStillWait) end
+                
+                if not RoundInProgress() then IsMurderer = false; LastPosition = nil; Working = false; return ChangeState(State.WaitingForRound) end
+
+                task.wait(2)
+                if LastText == ROUND_TIMER.Text then LastPosition = nil; IsMurderer = false; rt.RoundInProgress = false; Working = false return ChangeState(State.WaitingForRound) end
+
+                if Working then
+                    Working = false
+                    IsMurderer = false
+                    LastPosition = nil
+                    ChangeState(State.RespawnState)
+                end
+            end)
+
+            IsMurderer = rt.player.Backpack:FindFirstChild("Knife") and true or false   
+
+            -- Start auto farm loop
+            task.spawn(function()
+                while getgenv().AutoFarm do
+                    if CurrentState == State.WaitingForRound then
+                        WaitingForRound()
+                    elseif CurrentState == State.Action then
+                        ActionState()
+                    elseif CurrentState == State.WaitingForRoundEnd then
+                        waitForRoundEnd()
+                    elseif CurrentState == State.RespawnState then
+                        RespawnState()
+                    elseif CurrentState == State.StandStillWait then
+                        StandStillWait()
+                    end
+                    task.wait()
+                end
+                
+                -- Cleanup when disabled
+                AutoFarmCleanUp()
+                rt.Disconnect(rt.RoleTracker1)
+                rt.Disconnect(rt.InvalidPos)
+                rt.Disconnect(rt.UserDied)
+            end)
+            
+            Rayfield:Notify({
+                Title = "Auto Farm Enabled",
+                Content = "Coin farming is now active",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            -- Cleanup when disabled
+            AutoFarmCleanUp()
+            if rt.RoleTracker1 then rt.Disconnect(rt.RoleTracker1) end
+            if rt.InvalidPos then rt.Disconnect(rt.InvalidPos) end
+            if rt.UserDied then rt.Disconnect(rt.UserDied) end
+            
+            Rayfield:Notify({
+                Title = "Auto Farm Disabled",
+                Content = "Coin farming is now inactive",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end
 })
-local ButtonBringAllItems = BringItemTab:CreateButton({
-   Name = "Bring All Items",
-   Callback = function(Value)
-task.spawn(function()
-for _, Obj in pairs(game.workspace.Items:GetChildren()) do
-if Obj:isA("Model") and Obj.PrimaryPart then 
-Obj.PrimaryPart.CFrame = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame
-task.spawn(function()
-DragItem(Obj)
-end)
-end  
-end
-end)
-end,
+
+-- Add radius slider
+AutoFarmTab:CreateSlider({
+    Name = "Collection Radius",
+    Range = {50, 500},
+    Increment = 10,
+    Suffix = "studs",
+    CurrentValue = 200,
+    Flag = "AutoFarmRadius",
+    Callback = function(Value)
+        getgenv().AutoFarmRadius = Value
+    end
 })
-local ButtonBringAllLogs = BringItemTab:CreateButton({
-   Name = "Bring All Logs",
-   Callback = function(Value)
-task.spawn(function()
-for _, Obj in pairs(game.workspace.Items:GetChildren()) do
-if Obj.Name == "Log" and Obj:isA("Model") and Obj.PrimaryPart then 
-Obj.PrimaryPart.CFrame = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame
-DragItem(Obj)
-end  
-end
-end)
-end,
+
+-- Add speed slider
+AutoFarmTab:CreateSlider({
+    Name = "Collection Speed",
+    Range = {10, 100},
+    Increment = 5,
+    Suffix = "speed",
+    CurrentValue = 30,
+    Flag = "AutoFarmSpeed",
+    Callback = function(Value)
+        getgenv().AutoFarmSpeed = Value
+    end
 })
