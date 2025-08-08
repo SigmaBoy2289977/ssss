@@ -133,7 +133,7 @@ local function getMurdererTarget()
 end
 
 -- Roles Tab
-local rolesLabel = MainTab:CreateLabel("Sheriff: None\nMurder: None")
+local rolesLabel = InfoTab:CreateLabel("Sheriff: None\nMurder: None")
 local sheriffName = "none"
 local murderName = "none"
 
@@ -160,7 +160,7 @@ end
 
 game:GetService("RunService").Heartbeat:Connect(UpdateRoles)
 
-MainTab:CreateButton({
+InfoTab:CreateButton({
     Name = "Copy Roles",
     Callback = function()
         local namesToCopy = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
@@ -175,7 +175,7 @@ MainTab:CreateButton({
     end,
 })
 
-MainTab:CreateButton({
+InfoTab:CreateButton({
     Name = "Send roles to chat",
     Callback = function()
         local message = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
