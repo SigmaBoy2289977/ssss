@@ -96,7 +96,6 @@ local TeleportTab = Window:CreateTab("⛳Teleport")
 local AutoFarmTab = Window:CreateTab("♻AutoFarm")
 local EspTab = Window:CreateTab("🟥Esp")
 local MiscTab = Window:CreateTab("➕Misc")
-local RolesTab = Window:CreateTab("🧏Roles")
 local SettingsTab = Window:CreateTab("⚙Settings")
 local ActivateFly,AlrActivatedFlyPC,ActivateInfiniteJump,ActiveNoclip = false,false,false,false,false,false,false,false,false,false,false,false,false
 local ParagraphInfoServer = InfoTab:CreateParagraph({Title = "Info", Content = "Loading"})
@@ -134,7 +133,7 @@ local function getMurdererTarget()
 end
 
 -- Roles Tab
-local rolesLabel = RolesTab:CreateLabel("Sheriff: None\nMurder: None")
+local rolesLabel = MainTab:CreateLabel("Sheriff: None\nMurder: None")
 local sheriffName = "none"
 local murderName = "none"
 
@@ -161,7 +160,7 @@ end
 
 game:GetService("RunService").Heartbeat:Connect(UpdateRoles)
 
-RolesTab:CreateButton({
+MainTab:CreateButton({
     Name = "Copy Roles",
     Callback = function()
         local namesToCopy = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
@@ -176,7 +175,7 @@ RolesTab:CreateButton({
     end,
 })
 
-RolesTab:CreateButton({
+MainTab:CreateButton({
     Name = "Send roles to chat",
     Callback = function()
         local message = "Sheriff: "..sheriffName.."\nMurder: "..murderName.."\n<<Gojo Hub>>"
@@ -199,20 +198,6 @@ RolesTab:CreateButton({
             Image = nil,
         })
     end,
-})
-
-local Button = InfoTab:CreateButton({
-   Name = "Copy DIscord",
-   Callback = function()
-        setclipboard("https://discord.gg/7WtejdcD")
-
-            Rayfield:Notify({
-   Title = "Discord Link Copied!",
-   Content = "Discord Copied!",
-   Duration = 3,
-   Image = nil,
-})
-   end,
 })
 
 local ButtonUnloadCheat = SettingsTab:CreateButton({
@@ -243,6 +228,20 @@ local Dropdown = SettingsTab:CreateDropdown({
       local ident = Themes[Selected[1]]
       Window.ModifyTheme(ident)  -- <— Applique le thème en direct
    end, 
+})
+
+local Button = SettingsTab:CreateButton({
+   Name = "Copy DIscord",
+   Callback = function()
+        setclipboard("https://discord.gg/7WtejdcD")
+
+            Rayfield:Notify({
+   Title = "Discord Link Copied!",
+   Content = "Discord Copied!",
+   Duration = 3,
+   Image = nil,
+})
+   end,
 })
 
 local function getServerInfo()
@@ -1097,71 +1096,100 @@ MiscTab:CreateButton({
     end
 })
 
-MainTab:CreateButton({
-   Name = "Grab Gun",
-   Callback = function()
-        if Character and RootPart then
-            local gun = Workspace:FindFirstChild("GunDrop", true)
-            if gun then
-                if firetouchinterest then
-                    firetouchinterest(RootPart, gun, 0)
-                    firetouchinterest(RootPart, gun, 1)
-                else
-                    gun.CFrame = RootPart.CFrame
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local Character = nil
+local RootPart = nil
+local AutoGrabEnabled = false
+local GunGrabConnection = nil
+
+local function UpdateCharacter()
+    Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    RootPart = Character:WaitForChild("HumanoidRootPart")
+end
+
+LocalPlayer.CharacterAdded:Connect(UpdateCharacter)
+if LocalPlayer.Character then
+    UpdateCharacter()
+end
+
+local function GrabGun()
+    if not Character or not RootPart then return end
+
+    local Gun = Workspace:FindFirstChild("GunDrop", true)
+    if not Gun then
+        Rayfield:Notify({
+            Title = "⚠️ Gun Not Found!",
+            Content = "Dropped Gun Not Found!.",
+            Duration = 2,
+            Image = 7733658504
+        })
+        return
+    end
+
+    local OriginalCFrame = RootPart.CFrame
+
+    RootPart.CFrame = Gun.CFrame * CFrame.new(0, 0, 1)
+
+    if firetouchinterest then
+        firetouchinterest(RootPart, Gun, 0) -- Начинаем касание
+        firetouchinterest(RootPart, Gun, 1) -- Заканчиваем касание
+    else
+        Gun.CFrame = RootPart.CFrame -- Альтернативный метод
+    end
+
+    -- Ждем 0.5 сек и возвращаемся
+    task.wait(0.1)
+    if RootPart and OriginalCFrame then
+        RootPart.CFrame = OriginalCFrame
+    end
+end
+
+MainTab:CreateToggle({
+    Name = "Auto Grab Gun",
+    CurrentValue = false,
+    Flag = "AutoGrabToggle",
+    Callback = function(Value)
+        AutoGrabEnabled = Value
+
+        if AutoGrabEnabled then
+            if GunGrabConnection then
+                GunGrabConnection:Disconnect()
+            end
+
+            GunGrabConnection = RunService.Heartbeat:Connect(function()
+                if not Character or not RootPart then return end
+                local Gun = Workspace:FindFirstChild("GunDrop", true)
+                if Gun then
+                    GrabGun()
                 end
-                Rayfield:Notify({
-                    Title = "Gun Grabbed",
-                    Content = "Successfully grabbed the gun",
-                    Duration = 2,
-                    Image = 4483362458
-                })
-            else
-                Rayfield:Notify({
-                    Title = "Error",
-                    Content = "No gun found in workspace",
-                    Duration = 2,
-                    Image = 7733658504
-                })
+            end)
+        else
+            if GunGrabConnection then
+                GunGrabConnection:Disconnect()
+                GunGrabConnection = nil
             end
         end
     end
 })
 
-MainTab:CreateToggle({
-   Name = "Auto Grab Gun",
-   CurrentValue = false,
-   Flag = "AutoGrabGun",
-   Callback = function(Value)
-        getgenv().AGG = Value
-        
-        if Value then
+-- Ручной подбор оружия
+MainTab:CreateButton({
+    Name = "Grab Gun Now",
+    Callback = function()
+        if AutoGrabEnabled then
             Rayfield:Notify({
-                Title = "Auto Grab Enabled",
-                Content = "Will automatically grab guns when available",
-                Duration = 2,
-                Image = 4483362458
+                Title = "⚠️ Attention!",
+                Content = "Disable Auto Grab Gun!",
+                Duration = 3,
+                Image = 7733658504
             })
+        else
+            GrabGun()
         end
-        
-        local aggLoop
-        aggLoop = game:GetService("RunService").Heartbeat:Connect(function()
-            if not getgenv().AGG then
-                aggLoop:Disconnect()
-                return
-            end
-            
-            if Character and RootPart then
-                local gun = Workspace:FindFirstChild("GunDrop", true)
-                if gun then
-                    if firetouchinterest then
-                        firetouchinterest(RootPart, gun, 0)
-                        firetouchinterest(RootPart, gun, 1)
-                    else
-                        gun.CFrame = RootPart.CFrame
-                    end
-                end
-            end
-        end)
     end
 })
 
@@ -1272,184 +1300,3 @@ EspTab:CreateToggle({
     end
 })
 
--- Переменные для автофарма
-local autoFarmEnabled = false
-local coinRadius = 200
-local coinSpeed = 30
-local isCollecting = false
-local coinConnections = {}
-
--- Функция для очистки подключений
-local function CleanupCoinConnections()
-    for _, connection in pairs(coinConnections) do
-        connection:Disconnect()
-    end
-    coinConnections = {}
-end
-
--- Функция для сбора монет
-local function CollectCoins()
-    if not autoFarmEnabled or isCollecting then return end
-    isCollecting = true
-    
-    local character = game.Players.LocalPlayer.Character
-    if not character then return end
-    
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
-    
-    -- Находим контейнер с монетами
-    local coinContainer = workspace:FindFirstChild("CoinContainer", true)
-    if not coinContainer then
-        Rayfield:Notify({
-            Title = "Ошибка",
-            Content = "Контейнер с монетами не найден!",
-            Duration = 3,
-            Image = 7733658504
-        })
-        isCollecting = false
-        return
-    end
-    
-    -- Функция для проверки, живой ли игрок
-    local function IsPlayerAlive()
-        local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-        if playerGui and playerGui:FindFirstChild("MainGUI") then
-            local timer = playerGui.MainGUI.Game.Timer
-            return timer.Visible
-        end
-        return false
-    end
-    
-    -- Основной цикл сбора
-    while autoFarmEnabled and IsPlayerAlive() do
-        local closestCoin, closestDistance = nil, math.huge
-        
-        -- Ищем ближайшую монету
-        for _, coin in ipairs(coinContainer:GetChildren()) do
-            if coin:IsA("BasePart") and coin.Name == "Coin_Server" then
-                local distance = (humanoidRootPart.Position - coin.Position).Magnitude
-                if distance < coinRadius and distance < closestDistance then
-                    closestCoin = coin
-                    closestDistance = distance
-                end
-            end
-        end
-        
-        -- Если нашли монету - идем к ней
-        if closestCoin then
-            local startTime = tick()
-            local startPosition = humanoidRootPart.Position
-            local endPosition = closestCoin.Position
-            local duration = closestDistance / coinSpeed
-            
-            while tick() - startTime < duration and autoFarmEnabled do
-                if not IsPlayerAlive() then break end
-                
-                local progress = (tick() - startTime) / duration
-                local currentPosition = startPosition:Lerp(endPosition, progress)
-                humanoidRootPart.CFrame = CFrame.new(currentPosition)
-                
-                -- Проверяем, не подобрали ли монету
-                if not closestCoin.Parent then break end
-                
-                task.wait()
-            end
-            
-            -- Короткая пауза между монетами
-            task.wait(0.2)
-        else
-            -- Если монет рядом нет - небольшая пауза
-            task.wait(0.5)
-        end
-    end
-    
-    isCollecting = false
-end
-
--- Тоггл для автофарма
-AutoFarmTab:CreateToggle({
-    Name = "Включить автофарм",
-    CurrentValue = false,
-    Flag = "AutoFarmToggle",
-    Callback = function(Value)
-        autoFarmEnabled = Value
-        
-        if Value then
-            Rayfield:Notify({
-                Title = "Автофарм",
-                Content = "Автоматический сбор монет включен!",
-                Duration = 3,
-                Image = 4483362458
-            })
-            
-            -- Запускаем сбор монет
-            task.spawn(CollectCoins)
-            
-            -- Следим за изменениями в контейнере
-            local coinContainer = workspace:FindFirstChild("CoinContainer", true)
-            if coinContainer then
-                table.insert(coinConnections, coinContainer.ChildAdded:Connect(function()
-                    if autoFarmEnabled and not isCollecting then
-                        task.spawn(CollectCoins)
-                    end
-                end))
-            end
-        else
-            CleanupCoinConnections()
-            Rayfield:Notify({
-                Title = "Автофарм",
-                Content = "Автоматический сбор монет выключен!",
-                Duration = 3,
-                Image = 4483362458
-            })
-        end
-    end
-})
-
--- Слайдер для радиуса сбора
-AutoFarmTab:CreateSlider({
-    Name = "Радиус сбора",
-    Range = {50, 500},
-    Increment = 10,
-    Suffix = "studs",
-    CurrentValue = coinRadius,
-    Flag = "AutoFarmRadius",
-    Callback = function(Value)
-        coinRadius = Value
-    end
-})
-
--- Слайдер для скорости сбора
-AutoFarmTab:CreateSlider({
-    Name = "Скорость сбора",
-    Range = {10, 100},
-    Increment = 5,
-    Suffix = "speed",
-    CurrentValue = coinSpeed,
-    Flag = "AutoFarmSpeed",
-    Callback = function(Value)
-        coinSpeed = Value
-    end
-})
-
--- Кнопка для ручного сбора
-AutoFarmTab:CreateButton({
-    Name = "Собрать монеты рядом",
-    Callback = function()
-        if isCollecting then return end
-        
-        Rayfield:Notify({
-            Title = "Ручной сбор",
-            Content = "Начинаю сбор монет рядом...",
-            Duration = 2,
-            Image = 4483362458
-        })
-        
-        task.spawn(function()
-            autoFarmEnabled = true
-            CollectCoins()
-            autoFarmEnabled = false
-        end)
-    end
-})
